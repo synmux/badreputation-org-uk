@@ -1,28 +1,24 @@
 {
   "author": {
-    "email": "dave@dave.io",
-    "name": "Dave Williams",
-    "url": "https://github.com/daveio"
+    "email": "syn@syn.as",
+    "name": "syn",
+    "url": "https://github.com/synmux"
   },
   "devDependencies": {
     "@trunkio/launcher": "^1.3.4",
     "npm-run-all2": "^8.0.4",
-    "wrangler": "^4.71.0"
+    "wrangler": "^4.129.0"
   },
   "name": "badreputation-org-uk",
-  "packageManager": "bun@1.3.11",
   "private": true,
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "format": "bun run trunk fmt -a",
-    "format:types": "bun run trunk fmt worker-configuration.d.ts",
-    "postinstall": "bun run-s types format:types",
-    "start": "wrangler dev",
-    "test": "bun test",
-    "test:coverage": "bun test --coverage",
-    "test:watch": "bun test --watch",
-    "types": "bun run wrangler types"
+    "deploy": "pnpm exec wrangler deploy",
+    "dev": "pnpm exec wrangler dev",
+    "format": "pnpm exec trunk fmt -a",
+    "format:types": "pnpm exec trunk fmt worker-configuration.d.ts",
+    "postinstall": "pnpm exec run-s types format:types",
+    "start": "pnpm exec wrangler dev",
+    "types": "pnpm exec wrangler types"
   },
   "version": "0.0.0"
 }

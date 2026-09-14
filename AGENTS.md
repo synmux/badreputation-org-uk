@@ -11,29 +11,20 @@ The content appears to be a static export of a WordPress site, organized by date
 
 ## Tech Stack
 
-- **Runtime/Package Manager**: [Bun](https://bun.sh) (v1.3.7+)
+- **Runtime/Package Manager**: Node.js 24.20.0+, `pnpm`
 - **Deployment**: [Cloudflare Workers](https://workers.cloudflare.com/) via [Wrangler](https://developers.cloudflare.com/workers/wrangler/)
 - **Containerization**: [Docker](https://www.docker.com/) + [Caddy](https://caddyserver.com/)
-- **Testing**: Bun native test runner (`bun:test`)
 - **Linting**: [Trunk](https://trunk.io/)
 
 ## Key Commands
 
 ### Development & Deployment
 
-| Command          | Description                                           |
-| ---------------- | ----------------------------------------------------- |
-| `bun run dev`    | Start local development server (wraps `wrangler dev`) |
-| `bun run start`  | Alias for `dev`                                       |
-| `bun run deploy` | Deploy to Cloudflare Workers                          |
-
-### Testing & Verification
-
-| Command               | Description                   |
-| --------------------- | ----------------------------- |
-| `bun test`            | Run all unit tests            |
-| `bun test --watch`    | Run tests in watch mode       |
-| `bun test --coverage` | Generate test coverage report |
+| Command           | Description                                           |
+| ----------------- | ----------------------------------------------------- |
+| `pnpm run dev`    | Start local development server (wraps `wrangler dev`) |
+| `pnpm run start`  | Alias for `dev`                                       |
+| `pnpm run deploy` | Deploy to Cloudflare Workers                          |
 
 ### Docker
 
@@ -67,15 +58,6 @@ docker run -p 8000:8000 badreputation
   - Base Image: `caddy:2.11.0-beta.1-alpine`
   - Exposes port `8000`
   - Serves static files from `/srv` (mapped from `public/`)
-
-## Testing Patterns
-
-Tests are located in `test/` and use Bun's built-in test runner.
-
-- **`project-config.test.ts`**: Validates `package.json` settings.
-- **`wrangler-config.test.ts`**: Validates Cloudflare configuration.
-- **`static-assets.test.ts`**: Ensures critical static files exist.
-- **`gitignore.test.ts`**: Checks that sensitive/generated files are ignored.
 
 ## Important Notes
 
