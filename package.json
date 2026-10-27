@@ -20,5 +20,6 @@
     "start": "pnpm exec wrangler dev",
     "types": "pnpm exec wrangler types"
   },
+  "packageManager": "pnpm@12.14.0",
   "version": "0.0.0"
 }
