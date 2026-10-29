@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -38,6 +39,15 @@ def retry_wait_seconds(status, headers, body, now):
     if status == 429 or "rate limit" in body.lower():
         return 60
     return None  # A plain 403 is a permissions problem.
+
+
+class HTTPSOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        if urllib.parse.urlsplit(new_url).scheme != "https":
+            raise ValueError("Only HTTPS redirects are permitted")
+        return super().redirect_request(
+            request, response, code, message, headers, new_url
+        )
 
 
 class GitHubClient:
@@ -63,17 +73,26 @@ class GitHubClient:
                 },
             )
             try:
-                with urllib.request.urlopen(request, timeout=60) as response:
+                if urllib.parse.urlsplit(request.full_url).scheme != "https":
+                    raise ValueError("Only HTTPS URLs are permitted")
+                opener = urllib.request.build_opener(HTTPSOnlyRedirectHandler())
+                with opener.open(request, timeout=60) as response:
                     return json.load(response)
             except urllib.error.HTTPError as error:
                 body = error.read().decode(errors="replace")
                 wait = retry_wait_seconds(error.code, error.headers, body, time.time())
                 if wait is None:
-                    raise RuntimeError(f"{method} {path} -> HTTP {error.code}: {body}") from error
+                    raise RuntimeError(
+                        f"{method} {path} -> HTTP {error.code}: {body}"
+                    ) from error
                 with self.lock:
                     if time.time() + wait > self.resume_at:
                         self.resume_at = time.time() + wait
-                        print(f"HTTP {error.code}; pausing all workers for {wait}s", file=sys.stderr, flush=True)
+                        print(
+                            f"HTTP {error.code}; pausing all workers for {wait}s",
+                            file=sys.stderr,
+                            flush=True,
+                        )
 
 
 def open_alert_numbers(client, repo, rule):
@@ -81,20 +100,37 @@ def open_alert_numbers(client, repo, rule):
     alert_numbers = []
     page = 1
     while True:
-        batch = client.request("GET", f"/repos/{repo}/code-scanning/alerts?state=open&per_page=100&page={page}")
+        batch = client.request(
+            "GET",
+            f"/repos/{repo}/code-scanning/alerts?state=open&per_page=100&page={page}",
+        )
         if not batch:
             return alert_numbers
-        alert_numbers += [alert["number"] for alert in batch if alert["rule"]["id"] == rule]
+        alert_numbers += [
+            alert["number"] for alert in batch if alert["rule"]["id"] == rule
+        ]
         page += 1
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--repo", default="synmux/badreputation-org-uk", help="owner/name")
-    parser.add_argument("--rule", default="js/xss-through-dom", help="code scanning rule id to dismiss")
-    parser.add_argument("--comment", default=DEFAULT_COMMENT, help="dismissal comment (max 280 chars)")
-    parser.add_argument("--workers", type=int, default=8, help="concurrent dismiss requests")
-    parser.add_argument("--dry-run", action="store_true", help="list matching alerts without dismissing")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--repo", default="synmux/badreputation-org-uk", help="owner/name"
+    )
+    parser.add_argument(
+        "--rule", default="js/xss-through-dom", help="code scanning rule id to dismiss"
+    )
+    parser.add_argument(
+        "--comment", default=DEFAULT_COMMENT, help="dismissal comment (max 280 chars)"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=8, help="concurrent dismiss requests"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="list matching alerts without dismissing"
+    )
     arguments = parser.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN")
@@ -103,27 +139,41 @@ def main():
 
     client = GitHubClient(token)
     alert_numbers = open_alert_numbers(client, arguments.repo, arguments.rule)
-    print(f"{len(alert_numbers)} open {arguments.rule} alerts in {arguments.repo}", flush=True)
+    print(
+        f"{len(alert_numbers)} open {arguments.rule} alerts in {arguments.repo}",
+        flush=True,
+    )
     if arguments.dry_run or not alert_numbers:
         return
 
-    payload = {"state": "dismissed", "dismissed_reason": "won't fix", "dismissed_comment": arguments.comment}
+    payload = {
+        "state": "dismissed",
+        "dismissed_reason": "won't fix",
+        "dismissed_comment": arguments.comment,
+    }
     failures = []
     with ThreadPoolExecutor(max_workers=arguments.workers) as executor:
         futures = {
             executor.submit(
-                client.request, "PATCH", f"/repos/{arguments.repo}/code-scanning/alerts/{number}", payload
+                client.request,
+                "PATCH",
+                f"/repos/{arguments.repo}/code-scanning/alerts/{number}",
+                payload,
             ): number
             for number in alert_numbers
         }
         for completed, future in enumerate(as_completed(futures), start=1):
             try:
                 future.result()
-            except Exception as error:  # Keep going; a re-run picks up anything left open.
+            except (RuntimeError, OSError, ValueError) as error:
+                # Keep going; a re-run picks up anything left open.
                 failures.append(futures[future])
                 print(f"alert {futures[future]}: {error}", file=sys.stderr, flush=True)
             if completed % 100 == 0 or completed == len(futures):
-                print(f"{completed}/{len(futures)} processed, {len(failures)} failed", flush=True)
+                print(
+                    f"{completed}/{len(futures)} processed, {len(failures)} failed",
+                    flush=True,
+                )
 
     if failures:
         sys.exit(f"{len(failures)} alerts failed; re-run to retry them")
